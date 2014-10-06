@@ -1,0 +1,43 @@
+from scrapy.contrib.spiders import CrawlSpider, Rule
+from scrapy.contrib.linkextractors.sgml import SgmlLinkExtractor
+from scrapy.selector import Selector
+from pitchfork.items import ReviewItem 
+
+class BestNewAlbumsSpider(CrawlSpider):
+
+    name = 'best-new-albums'
+    allowed_domains = ['pitchfork.com']
+    start_urls = ['http://pitchfork.com/reviews/best/albums/']
+    #restrict_xpaths for only the 'Next' button, and allow for /reviews/best/albums/d+/, and call back parse_review
+    #rule below is for testing, stops at page in deny field
+    #rules = [Rule(SgmlLinkExtractor(allow=['/reviews/best/albums/\d+/', '/reviews/best/albums/'], deny=['/reviews/best/albums/3/'], restrict_xpaths=['//*[@class="next"]']), callback='parse_review', follow=True)]
+    rules = [Rule(SgmlLinkExtractor(allow=['/reviews/best/albums/\d+/', '/reviews/best/albums/'], restrict_xpaths=['//*[@class="next"]']), callback='parse_review', follow=True)]
+
+    def parse_review(self, response):
+        sel = Selector(response)
+        reviews = []
+
+        artists  = sel.xpath('//div[@class="info"]/a/h1/text()').extract()
+        albums = sel.xpath('//div[@class="info"]/a/h2/text()').extract()
+        dates = sel.xpath('//div[@class="info"]/h4/text()').extract()
+        scores = sel.xpath('//div[@class="info"]/span[contains(@class,"score")]/text()').extract()
+
+        images = sel.xpath('//a/div/node()').extract()
+        images_fixed = []
+        for image in images:
+            if "/list." in image:
+                image = image[image.find('src="')+5:image.find('.jpg"')+4]
+                images_fixed.append(image)
+        images = images_fixed
+        
+        for i in range(len(artists)):
+            review = ReviewItem()
+            review['artist'] = artists[i]
+            review['album'] = albums[i]
+            review['date'] = dates[i][dates[i].find(';')+2:len(dates[i])-1]
+            review['score'] = scores[i][1:len(scores[i])-1]
+
+            review['image_urls'] = [images[i]]
+
+            reviews.append(review)
+        return reviews
